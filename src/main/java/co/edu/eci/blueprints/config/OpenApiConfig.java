@@ -15,7 +15,7 @@ public class OpenApiConfig {
         return new OpenAPI()
           .info(new Info().title("BluePrints API")
             .version("2.0")
-            .description("Parte 2 — Seguridad con JWT (OAuth 2.0)"))
+            .description("API de blueprints con JWT. Primero haz login en /auth/login, copia el token y pégalo en Authorize (arriba a la derecha)."))
           .addSecurityItem(new SecurityRequirement().addList("bearer-jwt"))
           .components(new Components().addSecuritySchemes("bearer-jwt",
             new SecurityScheme()
