@@ -19,4 +19,7 @@ management:
 blueprints:
   security:
     issuer: "https://decsis-eci/blueprints"
+    # Vida del token. Bajarlo a 10 para ver el 401 por expiracion (actividad 4)
     token-ttl-seconds: 3600
+    # Tolerancia de reloj al validar exp. Spring usa 60 s por defecto; en 0 expira exacto
+    clock-skew-seconds: 0
