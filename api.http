@@ -1,5 +1,14 @@
-### Login (obtener token)
-POST http://localhost:8080/auth/login
+### ============================================================
+### BluePrints API – Parte 2 (JWT)
+### Cliente HTTP de IntelliJ: ejecutar las peticiones en orden.
+### Los scripts > {% %} guardan los tokens en variables globales.
+### ============================================================
+
+@host = http://localhost:8080
+@api = {{host}}/api/v1/blueprints
+
+### 1. Login student (solo blueprints.read)
+POST {{host}}/auth/login
 Content-Type: application/json
 
 {
@@ -7,6 +16,82 @@ Content-Type: application/json
   "password": "student123"
 }
 
-### Listar blueprints (usar token)
-GET http://localhost:8080/api/blueprints
-Authorization: Bearer {{access_token}}
+> {% client.global.set("student_token", response.body.access_token); %}
+
+### 2. Login assistant (blueprints.read + blueprints.write)
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "assistant",
+  "password": "assistant123"
+}
+
+> {% client.global.set("assistant_token", response.body.access_token); %}
+
+### 3. Login con contrasena incorrecta -> 401
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "student",
+  "password": "equivocada"
+}
+
+### 4. Listar todos (student) -> 200
+GET {{api}}
+Authorization: Bearer {{student_token}}
+
+### 5. Blueprints de un autor -> 200
+GET {{api}}/john
+Authorization: Bearer {{student_token}}
+
+### 6. Blueprint especifico -> 200
+GET {{api}}/john/house
+Authorization: Bearer {{student_token}}
+
+### 7. Autor inexistente -> 404
+GET {{api}}/nobody
+Authorization: Bearer {{student_token}}
+
+### 8. Crear blueprint con student -> 403 (scope insuficiente)
+POST {{api}}
+Authorization: Bearer {{student_token}}
+Content-Type: application/json
+
+{
+  "author": "student",
+  "name": "no-permitido",
+  "points": [ { "x": 1, "y": 1 } ]
+}
+
+### 9. Crear blueprint con assistant -> 201 (repetirla da 409)
+POST {{api}}
+Authorization: Bearer {{assistant_token}}
+Content-Type: application/json
+
+{
+  "author": "assistant",
+  "name": "oficina",
+  "points": [ { "x": 0, "y": 0 }, { "x": 5, "y": 0 }, { "x": 5, "y": 5 } ]
+}
+
+### 10. Agregar punto con assistant -> 202
+PUT {{api}}/assistant/oficina/points
+Authorization: Bearer {{assistant_token}}
+Content-Type: application/json
+
+{ "x": 0, "y": 5 }
+
+### 11. Datos invalidos -> 400
+POST {{api}}
+Authorization: Bearer {{assistant_token}}
+Content-Type: application/json
+
+{ "author": "", "name": "sin-autor" }
+
+### 12. Sin token -> 401
+GET {{api}}
+
+### 13. Health (publico) -> 200
+GET {{host}}/actuator/health

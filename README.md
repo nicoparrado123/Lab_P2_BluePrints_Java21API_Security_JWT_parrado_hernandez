@@ -6,6 +6,10 @@ Este laboratorio extiende la **Parte 1** ([Lab_P1_BluePrints_Java21_API](https:/
 El API se convierte en un **Resource Server** protegido por tokens Bearer firmados con **RS256**.  
 Incluye un endpoint didáctico `/auth/login` que emite el token para facilitar las pruebas.
 
+> **Implementación del equipo (Parrado – Hernández):** ver [INFORME.md](INFORME.md).
+> Diferencias con este enunciado: las rutas de negocio están en `/api/v1/blueprints`, el POST recibe `author`, `name` y `points`,
+> `student` solo tiene `blueprints.read` (`assistant` tiene lectura y escritura) y en Swagger se pega solo el token, sin `Bearer`.
+
 ---
 
 ## Objetivos

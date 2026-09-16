@@ -1,154 +1,266 @@
-# Informe – Lab P2: BluePrints API con JWT
-**Arquitecturas de Software – ECI**  
+# Informe – Lab P2: BluePrints API con seguridad JWT
+**Arquitecturas de Software (ARSW) – Escuela Colombiana de Ingeniería Julio Garavito**
 **Nicolás Parrado – Juan Hernández**
 
 ---
 
-## 1. Qué hicimos
+## 1. Resumen
 
-Tomamos la API del laboratorio anterior (P1) y le metimos seguridad con JWT. La idea es que ahora ningún endpoint funciona sin un token válido. Para conseguir el token hay que hacer login en `/auth/login`, y ese token tiene un tiempo de vida configurable.
+Partimos de la API de BluePrints del laboratorio P1 y la convertimos en un **OAuth 2.0 Resource Server**: ningún endpoint de negocio responde sin un **JWT firmado con RS256**, y cada operación exige un **scope** específico. El token se obtiene en el endpoint didáctico `POST /auth/login`.
 
-Usamos Spring Boot 3 con OAuth2 Resource Server, las llaves RSA se generan solas al arrancar la app (no hay que configurar nada externo), y los permisos se manejan con scopes dentro del mismo token.
+Además integramos todo lo construido en el P1: rutas versionadas (`/api/v1`), respuestas uniformes `ApiResponse<T>`, manejo global de errores, filtros por perfil y persistencia opcional en PostgreSQL.
+
+**Stack:** Java 21 · Spring Boot 3.3.2 · Spring Security 6 (Resource Server) · Nimbus JOSE + JWT · springdoc-openapi 2.6 · Spring Data JPA / PostgreSQL 16 · JUnit 5 + MockMvc.
 
 ---
 
-## 2. Cómo está organizado
+## 2. Estructura
 
 ```
 src/main/java/co/edu/eci/blueprints/
-  ├── api/         → el controller con los endpoints de blueprints
-  ├── auth/        → el login que emite el token
-  ├── config/      → configuración de Swagger
-  ├── filters/     → los tres filtros del P1 (identity, redundancy, undersampling)
-  ├── model/       → Blueprint y Point
-  ├── persistence/ → interfaz + implementación en memoria
-  ├── services/    → la lógica de negocio
-  └── security/    → todo lo de JWT: llaves, usuarios, configuración
+  ├── api/
+  │    ├── BlueprintController.java        endpoints /api/v1/blueprints (con @PreAuthorize)
+  │    ├── ApiResponse.java                contrato {code, message, data}
+  │    └── GlobalExceptionHandler.java     400 / 404 / 409 en formato ApiResponse
+  ├── auth/AuthController.java             POST /auth/login -> emite el JWT
+  ├── config/OpenApiConfig.java            Swagger + esquema bearer-jwt
+  ├── filters/                             Identity (default), Redundancy, Undersampling
+  ├── model/                               Blueprint, Point
+  ├── persistence/
+  │    ├── InMemoryBlueprintPersistence    perfil por defecto
+  │    └── impl/PostgresBlueprintPersistence (+ entidad JPA y repositorio)  perfil postgres
+  ├── services/BlueprintsServices.java
+  └── security/
+       ├── SecurityConfig.java             reglas de acceso, JwtEncoder/JwtDecoder
+       ├── MethodSecurityConfig.java       @EnableMethodSecurity
+       ├── JwtKeyProvider.java             par de llaves RSA 2048
+       ├── RsaKeyProperties.java           issuer, TTL y tolerancia de reloj
+       ├── InMemoryUserService.java        usuarios de prueba y sus scopes
+       ├── JsonAuthenticationEntryPoint    respuesta 401
+       └── JsonAccessDeniedHandler         respuesta 403
+src/main/resources/
+  ├── application.yml                      configuración base (en memoria)
+  ├── application-postgres.yml             perfil postgres
+  └── data.sql                             datos de ejemplo para postgres
+src/test/java/co/edu/eci/blueprints/       31 pruebas (ver sección 7)
 ```
 
 ---
 
-## 3. Lo que se implementó
+## 3. Flujo de autenticación
 
-### Seguridad
-
-La configuración en `SecurityConfig` define qué es público y qué no:
-- Público: `/auth/login`, Swagger, actuator/health
-- Todo lo de `/api/**` necesita token sí o sí
-
-Además cada endpoint tiene su `@PreAuthorize` con el scope exacto que necesita, así que no alcanza con tener un token cualquiera.
-
-### Scopes
-
-| Scope | Para qué sirve |
-|-------|----------------|
-| `blueprints.read` | consultar blueprints (GET) |
-| `blueprints.write` | crear blueprints y agregar puntos (POST, PUT) |
-
-### Usuarios de prueba
-
-| Usuario | Contraseña |
-|---------|------------|
-| student | student123 |
-| assistant | assistant123 |
-
-Ambos reciben el mismo token con los dos scopes.
-
-### Filtros (del P1)
-
-Se activán con perfiles de Spring:
-
-```bash
-# sin filtro (default)
-mvn -q -DskipTests spring-boot:run
-
-# elimina puntos consecutivos repetidos
-mvn -q -DskipTests spring-boot:run -Dspring-boot.run.profiles=redundancy
-
-# se queda con 1 de cada 2 puntos
-mvn -q -DskipTests spring-boot:run -Dspring-boot.run.profiles=undersampling
+```
+Cliente                         AuthController / SecurityConfig                 BlueprintController
+  │  POST /auth/login {user,pass}        │                                              │
+  │ ───────────────────────────────────► │ valida contraseña (BCrypt)                   │
+  │                                      │ firma JWT RS256 con la llave privada         │
+  │ ◄─────────────────────────────────── │ {access_token, token_type, expires_in, scope}│
+  │                                                                                     │
+  │  GET /api/v1/blueprints   Authorization: Bearer <token>                             │
+  │ ───────────────────────────────────► │ BearerTokenAuthenticationFilter              │
+  │                                      │  1. firma con la llave pública               │
+  │                                      │  2. exp (tolerancia 0 s)                     │
+  │                                      │  3. iss == https://decsis-eci/blueprints     │
+  │                                      │  4. scope -> authorities SCOPE_*             │
+  │                                      │ regla por URL + método (hasAuthority)        │
+  │                                      │ ───────────────────────────────────────────► │ @PreAuthorize
+  │ ◄─────────────────────────────────────────────────────────────────────────────────── │ 200 ApiResponse
 ```
 
-### Tiempo de expiración del token
+Si el token falta o no pasa las validaciones 1–3 la respuesta es **401**; si es válido pero no tiene el scope requerido, **403**.
 
-En `application.yml`:
+---
+
+## 4. Seguridad implementada
+
+### 4.1 Endpoints públicos y protegidos (`SecurityConfig`)
+
+| Ruta | Método | Acceso |
+|------|--------|--------|
+| `/auth/login` | POST | público |
+| `/actuator/health`, `/error` | * | público |
+| `/v3/api-docs/**`, `/swagger-ui/**` | * | público |
+| `/api/**` | GET | `SCOPE_blueprints.read` |
+| `/api/**` | POST, PUT | `SCOPE_blueprints.write` |
+| cualquier otra | * | autenticado |
+
+La autorización se aplica en **dos capas**: la regla por URL y método de `SecurityConfig`, y `@PreAuthorize` en cada método de `BlueprintController`. Si alguien agrega un endpoint y olvida una de las dos, la otra sigue protegiendo.
+
+### 4.2 Usuarios y scopes
+
+| Usuario | Contraseña | Scopes en el token |
+|---------|------------|--------------------|
+| `student` | `student123` | `blueprints.read` |
+| `assistant` | `assistant123` | `blueprints.read blueprints.write` |
+
+Las contraseñas se guardan como hash **BCrypt**. Cuando el usuario no existe igual se ejecuta una comparación contra un hash falso, para que el tiempo de respuesta no revele qué usuarios existen.
+
+### 4.3 Emisión y validación del token
+
+- **Algoritmo:** RS256. `JwtKeyProvider` genera un par RSA de 2048 bits al arrancar; la llave privada firma (`JwtEncoder`) y la pública valida (`JwtDecoder`).
+- **Claims emitidos:** `iss`, `sub`, `iat`, `exp`, `jti` y `scope`.
+- **Validaciones:** firma, expiración e issuer. Spring por defecto solo valida fechas y además con **60 s de tolerancia**; configuramos `clock-skew-seconds: 0` para que el token expire exactamente al cumplir su TTL y añadimos `JwtIssuerValidator`.
+- **Sin sesión:** `SessionCreationPolicy.STATELESS`; cada petición trae su token. Por eso CSRF está deshabilitado (no hay cookies de sesión que un sitio externo pueda aprovechar).
+
+Configuración en `application.yml`:
+
 ```yaml
 blueprints:
   security:
+    issuer: "https://decsis-eci/blueprints"
     token-ttl-seconds: 3600
+    clock-skew-seconds: 0
 ```
 
-Si lo bajas a `10` el token dura 10 segundos y después la API empieza a responder 401. Útil para ver cómo se comporta la seguridad.
+### 4.4 Respuestas de error
+
+Todas las respuestas, incluidos los errores de seguridad, usan el mismo contrato `ApiResponse`. En 401 y 403 también se conserva la cabecera estándar `WWW-Authenticate` (RFC 6750).
+
+```json
+// 401 – sin token, token inválido, expirado o de otro issuer
+{ "code": 401, "message": "unauthorized: ...", "data": null }
+
+// 403 – token válido sin el scope requerido
+{ "code": 403, "message": "forbidden: the token does not have the required scope", "data": null }
+```
+
+| Código | Cuándo |
+|--------|--------|
+| 200 | consulta exitosa |
+| 201 | blueprint creado |
+| 202 | punto agregado |
+| 400 | JSON mal formado o campos faltantes |
+| 401 | sin token / token inválido / credenciales incorrectas en el login |
+| 403 | scope insuficiente |
+| 404 | autor o blueprint inexistente |
+| 409 | el blueprint ya existe |
 
 ---
 
-## 4. Evidencias
+## 5. Integración con el P1
 
-### App arrancando
-
-<!-- captura de la consola con el banner de Spring Boot -->
-![app-iniciada](img-01-app-iniciada.png)
-
-### Swagger UI
-
-<!-- captura de http://localhost:8080/swagger-ui/index.html -->
-![swagger-ui](img-02-swagger-ui.png)
-
-### Login – obtener el token
-
-<!-- POST /auth/login con el body y la respuesta con el access_token -->
-![login](img-03-login.png)
-
-### Pegando el token en Swagger
-
-<!-- el modal de Authorize con el token ya puesto -->
-![authorize](img-04-authorize.png)
-
-### GET /api/blueprints – lista completa
-
-<!-- respuesta 200 con los blueprints -->
-![get-all](img-05-get-all.png)
-
-### GET /api/blueprints/{author}
-
-<!-- blueprints de john -->
-![get-author](img-06-get-author.png)
-
-### GET /api/blueprints/{author}/{bpname}
-
-<!-- john/house específico -->
-![get-one](img-07-get-one.png)
-
-### POST /api/blueprints – crear uno nuevo
-
-<!-- body con author/name/points y respuesta 201 -->
-![post](img-08-post.png)
-
-### PUT – agregar un punto
-
-<!-- respuesta 202 -->
-![put-point](img-09-put-point.png)
-
-### Sin token – 401
-
-<!-- GET sin Authorization header -->
-![sin-token](img-10-sin-token.png)
-
-### Token expirado – 401
-
-<!-- con token-ttl-seconds en 10 y esperando que expire -->
-![token-expirado](img-11-token-expirado.png)
+- **Endpoints:** `GET /api/v1/blueprints`, `GET /{author}`, `GET /{author}/{bpname}`, `POST /`, `PUT /{author}/{bpname}/points`.
+- **`ApiResponse<T>`** en todas las respuestas y **`GlobalExceptionHandler`** para 400/404/409.
+- **Filtros** activables por perfil de Spring (se aplican al consultar un blueprint específico):
+  - `identity` (por defecto), `redundancy` (quita puntos consecutivos repetidos), `undersampling` (conserva 1 de cada 2 puntos).
+- **Persistencia:** en memoria por defecto; PostgreSQL con el perfil `postgres`. Frente al P1 se agregó una columna de orden para los puntos (los filtros dependen del orden) y el manejo de creaciones simultáneas del mismo blueprint (responde 409 en vez de 500).
+- `Blueprint` usa una lista segura para hilos, porque varias peticiones pueden agregar puntos al mismo plano a la vez.
 
 ---
 
-## 5. Las actividades del README
+## 6. Ejecución
 
-**Actividad 1** – En `SecurityConfig` los endpoints públicos van con `.permitAll()` y los protegidos con `.hasAnyAuthority(...)`. Después cada método del controller tiene su `@PreAuthorize` para afinar más.
+Requisitos: JDK 21 y Maven 3.9+ (Docker solo para el perfil `postgres`).
 
-**Actividad 2** – El JWT tiene: `iss`, `iat`, `exp`, `sub` (el username) y `scope`. Se puede pegar en [jwt.io](https://jwt.io) para ver las claims.
+```powershell
+# En memoria, sin filtro
+mvn spring-boot:run
 
-**Actividad 3** – Todos los endpoints del P1 quedaron integrados y protegidos con el scope que corresponde.
+# Con filtros
+mvn spring-boot:run "-Dspring-boot.run.profiles=redundancy"
+mvn spring-boot:run "-Dspring-boot.run.profiles=undersampling"
 
-**Actividad 4** – Con `token-ttl-seconds: 10` el token expira rápido y se puede ver el 401 en acción.
+# Con PostgreSQL (se puede combinar con un filtro: postgres,redundancy)
+docker compose up -d
+mvn spring-boot:run "-Dspring-boot.run.profiles=postgres"
 
-**Actividad 5** – Todos los endpoints tienen `@Operation`, `@ApiResponses` y `@Tag`. El esquema JWT está en `OpenApiConfig` y se referencia con `@SecurityRequirement` en el controller.
+# Pruebas
+mvn clean test
+```
+
+- Swagger UI: http://localhost:8080/swagger-ui/index.html → hacer login, copiar el `access_token` y pegarlo en **Authorize** (solo el token; Swagger agrega `Bearer` automáticamente).
+- `api.http` contiene todas las peticiones listas para el cliente HTTP de IntelliJ.
+
+---
+
+## 7. Pruebas automatizadas
+
+`mvn clean test` → **31 pruebas, 0 fallos**.
+
+| Clase | Pruebas | Qué cubre |
+|-------|---------|-----------|
+| `BlueprintsServicesTest` | 11 | servicios, persistencia en memoria, filtros |
+| `SecurityIntegrationTest` | 19 | login (200/400/401), claims del JWT, 401 (sin token, malformado, firma alterada, expirado, otro issuer), 403 (student escribiendo, token sin scopes), 200/201/202/400/404/409 con tokens reales, rutas públicas |
+| `TokenExpirationTest` | 1 | con TTL de 3 s el mismo token pasa de 200 a 401 al vencer |
+
+---
+
+## 8. Actividades del README
+
+**Actividad 1 – Endpoints públicos y protegidos.** En `SecurityConfig.filterChain` los endpoints públicos se declaran con `.permitAll()` (login, health, Swagger) y los protegidos con `.hasAuthority(...)` según el método HTTP; lo que no coincide cae en `.anyRequest().authenticated()`. `oauth2ResourceServer().jwt()` activa el filtro que lee el header `Authorization: Bearer`. Ver tabla 4.1.
+
+**Actividad 2 – Flujo de login y claims.** El login valida las credenciales, arma un `JwtClaimsSet` y lo firma con la llave privada. El token decodificado contiene:
+
+| Claim | Ejemplo | Significado |
+|-------|---------|-------------|
+| `iss` | `https://decsis-eci/blueprints` | quién emitió el token (se valida) |
+| `sub` | `student` | usuario autenticado |
+| `iat` | `1758060000` | fecha de emisión (epoch s) |
+| `exp` | `1758063600` | fecha de expiración = iat + TTL |
+| `jti` | `3f1c...` | identificador único del token |
+| `scope` | `blueprints.read` | permisos; Spring los convierte en authorities `SCOPE_*` |
+
+Evidencia en la captura de jwt.io (sección 9) y en la prueba `tokenContainsExpectedClaims`.
+
+**Actividad 3 – Scopes sobre los endpoints del P1.** Todos los endpoints del P1 quedaron protegidos: lecturas con `blueprints.read` y escrituras con `blueprints.write`. Para que la diferencia sea observable, `student` solo recibe lectura y `assistant` recibe ambos; `student` obtiene 403 al intentar crear o modificar.
+
+**Actividad 4 – Tiempo de expiración.** Con `token-ttl-seconds: 10` el token deja de funcionar a los 10 s y la API responde 401 con el mensaje `Jwt expired at ...`. Hallazgo: con la configuración por defecto de Spring el token seguía siendo aceptado unos 60 s más por la tolerancia de reloj (`JwtTimestampValidator`); por eso la dejamos configurable y en 0. `TokenExpirationTest` lo verifica automáticamente.
+
+**Actividad 5 – Documentación en Swagger.** `OpenApiConfig` define el esquema `bearer-jwt` (HTTP bearer, formato JWT) y la tabla de usuarios. Todos los endpoints tienen `@Tag`, `@Operation` y `@ApiResponses` con sus códigos (incluidos 401/403); `/auth/login` usa `@SecurityRequirements` vacío para indicar que no requiere token.
+
+---
+
+## 9. Evidencias
+
+### 9.1 Pruebas automatizadas
+![tests](docs/evidencias/img-01-tests.png)
+
+### 9.2 Aplicación iniciada
+![app-iniciada](docs/evidencias/img-02-app-iniciada.png)
+
+### 9.3 Swagger UI
+![swagger-ui](docs/evidencias/img-03-swagger-ui.png)
+
+### 9.4 Login de assistant (token con ambos scopes)
+![login](docs/evidencias/img-04-login-assistant.png)
+
+### 9.5 Claims del JWT en jwt.io
+![jwt-claims](docs/evidencias/img-05-jwt-claims.png)
+
+### 9.6 Token en Authorize
+![authorize](docs/evidencias/img-06-authorize.png)
+
+### 9.7 GET /api/v1/blueprints – 200
+![get-all](docs/evidencias/img-07-get-all.png)
+
+### 9.8 GET /api/v1/blueprints/{author} – 200
+![get-author](docs/evidencias/img-08-get-author.png)
+
+### 9.9 GET /api/v1/blueprints/{author}/{bpname} – 200
+![get-one](docs/evidencias/img-09-get-one.png)
+
+### 9.10 POST con assistant – 201
+![post](docs/evidencias/img-10-post-201.png)
+
+### 9.11 PUT agregar punto – 202
+![put-point](docs/evidencias/img-11-put-202.png)
+
+### 9.12 POST con student – 403
+![student-403](docs/evidencias/img-12-student-403.png)
+
+### 9.13 Sin token – 401
+![sin-token](docs/evidencias/img-13-sin-token-401.png)
+
+### 9.14 Token expirado – 401
+![token-expirado](docs/evidencias/img-14-token-expirado-401.png)
+
+### 9.15 Perfil postgres (opcional)
+![postgres](docs/evidencias/img-15-postgres.png)
+
+---
+
+## 10. Decisiones y limitaciones
+
+- **Login didáctico:** en un sistema real la emisión de tokens la haría un servidor de autorización (Keycloak, Azure AD, Auth0) y esta API solo validaría tokens mediante su JWKS.
+- **Llaves en memoria:** se regeneran en cada arranque, así que los tokens emitidos antes de reiniciar dejan de ser válidos. En producción se cargarían desde un keystore o gestor de secretos.
+- **Usuarios en memoria** y sin refresh tokens ni revocación: suficiente para el alcance del laboratorio.
