@@ -2,6 +2,7 @@ package co.edu.eci.blueprints.persistence;
 
 import co.edu.eci.blueprints.model.Blueprint;
 import co.edu.eci.blueprints.model.Point;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import java.util.*;
@@ -9,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Repository
+@Profile("!postgres")
 public class InMemoryBlueprintPersistence implements BlueprintPersistence {
 
     private final Map<String, Blueprint> blueprints = new ConcurrentHashMap<>();

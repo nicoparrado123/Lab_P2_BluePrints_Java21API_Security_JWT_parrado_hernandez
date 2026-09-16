@@ -1,6 +1,15 @@
 server:
   port: 8080
 
+spring:
+  # Perfil por defecto: persistencia en memoria, sin base de datos.
+  # El perfil "postgres" (application-postgres.yml) vuelve a habilitar DataSource/JPA.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+
 management:
   endpoints:
     web:

@@ -1,15 +1,16 @@
 package co.edu.eci.blueprints.model;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class Blueprint {
 
-    private String author;
-    private String name;
-    private final List<Point> points = new ArrayList<>();
+    private final String author;
+    private final String name;
+    // CopyOnWriteArrayList: varias peticiones pueden agregar puntos al mismo blueprint a la vez
+    private final List<Point> points = new CopyOnWriteArrayList<>();
 
     public Blueprint(String author, String name, List<Point> pts) {
         this.author = author;

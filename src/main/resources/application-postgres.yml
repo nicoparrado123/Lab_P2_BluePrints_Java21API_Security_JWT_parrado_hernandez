@@ -1,0 +1,24 @@
+# Perfil "postgres": activar con -Dspring-boot.run.profiles=postgres
+# Base de datos: docker compose up -d  (ver docker-compose.yml)
+spring:
+  autoconfigure:
+    # Reemplaza la lista de exclusiones del application.yml (una lista de mayor prioridad
+    # sustituye completa a la otra), dejando otra vez activos DataSource y JPA.
+    # Gson no se usa en el proyecto; se pone solo para que la lista no quede vacia.
+    exclude:
+      - org.springframework.boot.autoconfigure.gson.GsonAutoConfiguration
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/blueprints}
+    username: ${DB_USER:blueprints}
+    password: ${DB_PASSWORD:blueprints}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    show-sql: false
+    # Hibernate crea las tablas antes de que corra data.sql
+    defer-datasource-initialization: true
+  sql:
+    init:
+      # Por defecto data.sql solo corre en bases embebidas; aqui se fuerza en Postgres
+      mode: always
