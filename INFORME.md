@@ -212,50 +212,64 @@ Evidencia en la captura de jwt.io (sección 9) y en la prueba `tokenContainsExpe
 
 ## 9. Evidencias
 
-### 9.1 Pruebas automatizadas
+### 9.1 Pruebas automatizadas (`mvn clean test`)
 ![tests](docs/evidencias/img-01-tests.png)
 
 ### 9.2 Aplicación iniciada
 ![app-iniciada](docs/evidencias/img-02-app-iniciada.png)
 
 ### 9.3 Swagger UI
-![swagger-ui](docs/evidencias/img-03-swagger-ui.png)
+![swagger-ui](docs/evidencias/img-03-swagger.png)
 
-### 9.4 Login de assistant (token con ambos scopes)
-![login](docs/evidencias/img-04-login-assistant.png)
+### 9.4 Login de assistant (token con los dos scopes)
+![login-body](docs/evidencias/img-04-login-assistant-body.png)
+![login-response](docs/evidencias/img-04-login-assistant-response.png)
 
-### 9.5 Claims del JWT en jwt.io
+### 9.5 Claims del JWT decodificado
 ![jwt-claims](docs/evidencias/img-05-jwt-claims.png)
 
 ### 9.6 Token en Authorize
 ![authorize](docs/evidencias/img-06-authorize.png)
 
 ### 9.7 GET /api/v1/blueprints – 200
-![get-all](docs/evidencias/img-07-get-all.png)
+![get-all-request](docs/evidencias/img-07-get-all-request.png)
+![get-all-response](docs/evidencias/img-07-get-all-response.png)
 
 ### 9.8 GET /api/v1/blueprints/{author} – 200
-![get-author](docs/evidencias/img-08-get-author.png)
+![get-author-request](docs/evidencias/img-08-get-author-request.png)
+![get-author-response](docs/evidencias/img-08-get-author-response.png)
 
 ### 9.9 GET /api/v1/blueprints/{author}/{bpname} – 200
-![get-one](docs/evidencias/img-09-get-one.png)
+![get-one-request](docs/evidencias/img-09-get-one-request.png)
+![get-one-response](docs/evidencias/img-09-get-one-response.png)
 
 ### 9.10 POST con assistant – 201
-![post](docs/evidencias/img-10-post-201.png)
+![post-request](docs/evidencias/img-10-post-201-request.png)
+![post-response](docs/evidencias/img-10-post-201-response.png)
 
 ### 9.11 PUT agregar punto – 202
-![put-point](docs/evidencias/img-11-put-202.png)
+![put-request](docs/evidencias/img-11-put-202-request.png)
+![put-response](docs/evidencias/img-11-put-202-response.png)
 
-### 9.12 POST con student – 403
-![student-403](docs/evidencias/img-12-student-403.png)
+### 9.12 Login de student (token solo de lectura)
+![login-student-request](docs/evidencias/img-12-login-student-request.png)
+![login-student-response](docs/evidencias/img-12-login-student-response.png)
+![authorize-student](docs/evidencias/img-13-auth-student.png)
 
-### 9.13 Sin token – 401
-![sin-token](docs/evidencias/img-13-sin-token-401.png)
+### 9.13 POST con student – 403 (scope insuficiente)
+![student-403-request](docs/evidencias/img-14-student-403-request.png)
+![student-403-response](docs/evidencias/img-14-student-403-response.png)
 
-### 9.14 Token expirado – 401
-![token-expirado](docs/evidencias/img-14-token-expirado-401.png)
+### 9.14 Sin token – 401
+![sin-token](docs/evidencias/img-15-sin-token-401.png)
 
-### 9.15 Perfil postgres (opcional)
-![postgres](docs/evidencias/img-15-postgres.png)
+### 9.15 Token expirado – 401
+![token-expirado-request](docs/evidencias/img-16-token-expirado-401-request.png)
+![token-expirado-response](docs/evidencias/img-16-token-expirado-401-response.png)
+
+### 9.16 Perfil postgres: escritura desde la API y datos en la base
+![postgres-put](docs/evidencias/img-17-postgres-put.png)
+![postgres-select](docs/evidencias/img-18-postgres-select.png)
 
 ---
 
