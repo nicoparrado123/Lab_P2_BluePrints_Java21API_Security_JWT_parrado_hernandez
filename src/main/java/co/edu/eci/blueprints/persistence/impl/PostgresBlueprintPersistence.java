@@ -77,4 +77,23 @@ public class PostgresBlueprintPersistence implements BlueprintPersistence {
                 .orElseThrow(() -> new BlueprintNotFoundException("Blueprint not found: " + author + "/" + name));
         e.getPoints().add(new PointEmbeddable(x, y));
     }
+
+    @Override
+    @Transactional
+    public Blueprint updateBlueprint(String author, String name, List<Point> points) throws BlueprintNotFoundException {
+        BlueprintEntity e = repo.findByAuthorAndName(author, name)
+                .orElseThrow(() -> new BlueprintNotFoundException("Blueprint not found: " + author + "/" + name));
+        // La entidad esta administrada: al cerrar la transaccion Hibernate reescribe blueprint_points
+        e.getPoints().clear();
+        points.forEach(p -> e.getPoints().add(new PointEmbeddable(p.x(), p.y())));
+        return toDomain(e);
+    }
+
+    @Override
+    @Transactional
+    public void deleteBlueprint(String author, String name) throws BlueprintNotFoundException {
+        BlueprintEntity e = repo.findByAuthorAndName(author, name)
+                .orElseThrow(() -> new BlueprintNotFoundException("Blueprint not found: " + author + "/" + name));
+        repo.delete(e); // @ElementCollection: sus puntos se borran en cascada
+    }
 }

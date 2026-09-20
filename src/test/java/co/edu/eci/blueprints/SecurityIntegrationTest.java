@@ -24,6 +24,7 @@ import java.util.UUID;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -200,6 +201,24 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    void studentCannotUpdateOrDeleteBlueprint() throws Exception {
+        String auth = bearer(login("student", "student123"));
+        mvc.perform(put(API + "/john/house").header(HttpHeaders.AUTHORIZATION, auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"points\":[{\"x\":1,\"y\":1}]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403));
+        mvc.perform(delete(API + "/john/house").header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403));
+    }
+
+    @Test
+    void deleteWithoutTokenReturns401() throws Exception {
+        mvc.perform(delete(API + "/john/house")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void tokenWithoutScopesCannotRead() throws Exception {
         Instant now = Instant.now();
         String noScopes = signedToken(props.issuer(), now, now.plusSeconds(600), "");
@@ -262,6 +281,59 @@ class SecurityIntegrationTest {
         mvc.perform(get(API + "/assistant/" + name).header(HttpHeaders.AUTHORIZATION, auth))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.points", hasSize(3)));
+    }
+
+    @Test
+    void assistantCanUpdateAndDeleteBlueprint() throws Exception {
+        String auth = bearer(login("assistant", "assistant123"));
+        String name = "bp-" + UUID.randomUUID();
+        mvc.perform(post(API).header(HttpHeaders.AUTHORIZATION, auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(newBlueprintJson("assistant", name)))
+                .andExpect(status().isCreated());
+
+        mvc.perform(put(API + "/assistant/" + name).header(HttpHeaders.AUTHORIZATION, auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"author\":\"assistant\",\"name\":\"%s\",\"points\":[{\"x\":9,\"y\":9},{\"x\":8,\"y\":7},{\"x\":1,\"y\":0}]}"
+                                .formatted(name)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.points", hasSize(3)))
+                .andExpect(jsonPath("$.data.points[0].x").value(9));
+
+        mvc.perform(get(API + "/assistant/" + name).header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.points", hasSize(3)));
+
+        mvc.perform(delete(API + "/assistant/" + name).header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        mvc.perform(get(API + "/assistant/" + name).header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(status().isNotFound());
+        mvc.perform(delete(API + "/assistant/" + name).header(HttpHeaders.AUTHORIZATION, auth))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void invalidUpdatesReturn400Or404() throws Exception {
+        String auth = bearer(login("assistant", "assistant123"));
+        // sin lista de puntos
+        mvc.perform(put(API + "/john/house").header(HttpHeaders.AUTHORIZATION, auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"author\":\"john\",\"name\":\"house\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+        // intento de renombrar
+        mvc.perform(put(API + "/john/house").header(HttpHeaders.AUTHORIZATION, auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"author\":\"john\",\"name\":\"otro\",\"points\":[]}"))
+                .andExpect(status().isBadRequest());
+        // blueprint inexistente
+        mvc.perform(put(API + "/nobody/x").header(HttpHeaders.AUTHORIZATION, auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"points\":[]}"))
+                .andExpect(status().isNotFound());
     }
 
     @Test

@@ -111,10 +111,59 @@ public class BlueprintController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.of(202, "accepted"));
     }
 
+    @Operation(summary = "Actualizar blueprint",
+               description = "Requiere scope blueprints.write. Reemplaza todos los puntos del blueprint. "
+                           + "author/name en el cuerpo son opcionales; si vienen deben coincidir con la URL (no se permite renombrar).")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Blueprint actualizado"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Datos invalidos o author/name distintos a la URL"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Token invalido, expirado o ausente"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Scope insuficiente"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Blueprint no encontrado")
+    })
+    @PutMapping("/{author}/{bpname}")
+    @PreAuthorize("hasAuthority('SCOPE_blueprints.write')")
+    public ResponseEntity<ApiResponse<Blueprint>> update(@PathVariable String author,
+                                                         @PathVariable String bpname,
+                                                         @Valid @RequestBody UpdateBlueprintRequest req)
+            throws BlueprintNotFoundException {
+        boolean authorMismatch = req.author() != null && !req.author().equals(author);
+        boolean nameMismatch = req.name() != null && !req.name().equals(bpname);
+        if (authorMismatch || nameMismatch) {
+            return ResponseEntity.badRequest().body(ApiResponse.<Blueprint>of(400,
+                    "author/name in the body must match the URL (renaming is not supported)", null));
+        }
+        Blueprint updated = services.updateBlueprint(author, bpname, req.points());
+        return ResponseEntity.ok(ApiResponse.of(200, "updated", updated));
+    }
+
+    @Operation(summary = "Eliminar blueprint", description = "Requiere scope blueprints.write.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Blueprint eliminado"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Token invalido, expirado o ausente"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Scope insuficiente"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Blueprint no encontrado")
+    })
+    @DeleteMapping("/{author}/{bpname}")
+    @PreAuthorize("hasAuthority('SCOPE_blueprints.write')")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable String author,
+                                                    @PathVariable String bpname)
+            throws BlueprintNotFoundException {
+        services.deleteBlueprint(author, bpname);
+        return ResponseEntity.ok(ApiResponse.of(200, "deleted"));
+    }
+
     public record NewBlueprintRequest(
             @NotBlank String author,
             @NotBlank String name,
             List<Point> points
+    ) {}
+
+    /** Cuerpo del PUT completo: la lista de puntos es obligatoria (puede ir vacia). */
+    public record UpdateBlueprintRequest(
+            String author,
+            String name,
+            @NotNull List<@NotNull Point> points
     ) {}
 
     /** Integer (no int) para que un JSON sin x o y responda 400 en vez de asumir 0. */

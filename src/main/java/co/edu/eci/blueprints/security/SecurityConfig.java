@@ -45,6 +45,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/**").hasAuthority(READ)
                 .requestMatchers(HttpMethod.POST, "/api/**").hasAuthority(WRITE)
                 .requestMatchers(HttpMethod.PUT, "/api/**").hasAuthority(WRITE)
+                .requestMatchers(HttpMethod.DELETE, "/api/**").hasAuthority(WRITE)
                 .anyRequest().authenticated()
             )
             // Segunda barrera: @PreAuthorize en cada metodo del controller (MethodSecurityConfig)

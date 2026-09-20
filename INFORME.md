@@ -81,7 +81,7 @@ Si el token falta o no pasa las validaciones 1–3 la respuesta es **401**; si e
 | `/actuator/health`, `/error` | * | público |
 | `/v3/api-docs/**`, `/swagger-ui/**` | * | público |
 | `/api/**` | GET | `SCOPE_blueprints.read` |
-| `/api/**` | POST, PUT | `SCOPE_blueprints.write` |
+| `/api/**` | POST, PUT, DELETE | `SCOPE_blueprints.write` |
 | cualquier otra | * | autenticado |
 
 La autorización se aplica en **dos capas**: la regla por URL y método de `SecurityConfig`, y `@PreAuthorize` en cada método de `BlueprintController`. Si alguien agrega un endpoint y olvida una de las dos, la otra sigue protegiendo.
@@ -139,7 +139,7 @@ Todas las respuestas, incluidos los errores de seguridad, usan el mismo contrato
 
 ## 5. Integración con el P1
 
-- **Endpoints:** `GET /api/v1/blueprints`, `GET /{author}`, `GET /{author}/{bpname}`, `POST /`, `PUT /{author}/{bpname}/points`.
+- **Endpoints:** `GET /api/v1/blueprints`, `GET /{author}`, `GET /{author}/{bpname}`, `POST /`, `PUT /{author}/{bpname}/points`, y (agregados para el cliente React del Lab P3) `PUT /{author}/{bpname}` que reemplaza todos los puntos (200; 400 si falta `points` o si `author`/`name` del cuerpo no coinciden con la URL) y `DELETE /{author}/{bpname}` (200; 404 si no existe). Ambos exigen `blueprints.write` en `SecurityConfig` y con `@PreAuthorize`, y están implementados en memoria y en PostgreSQL.
 - **`ApiResponse<T>`** en todas las respuestas y **`GlobalExceptionHandler`** para 400/404/409.
 - **Filtros** activables por perfil de Spring (se aplican al consultar un blueprint específico):
   - `identity` (por defecto), `redundancy` (quita puntos consecutivos repetidos), `undersampling` (conserva 1 de cada 2 puntos).

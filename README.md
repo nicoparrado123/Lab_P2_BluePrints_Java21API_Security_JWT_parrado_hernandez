@@ -9,6 +9,8 @@ Incluye un endpoint didáctico `/auth/login` que emite el token para facilitar l
 > **Implementación del equipo (Parrado – Hernández):** ver [INFORME.md](INFORME.md).
 > Diferencias con este enunciado: las rutas de negocio están en `/api/v1/blueprints`, el POST recibe `author`, `name` y `points`,
 > `student` solo tiene `blueprints.read` (`assistant` tiene lectura y escritura) y en Swagger se pega solo el token, sin `Bearer`.
+> Para el cliente React (Lab P3) se agregaron `PUT /api/v1/blueprints/{author}/{bpname}` (reemplaza los puntos) y
+> `DELETE /api/v1/blueprints/{author}/{bpname}`, ambos con scope `blueprints.write`.
 
 ---
 

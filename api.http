@@ -83,6 +83,32 @@ Content-Type: application/json
 
 { "x": 0, "y": 5 }
 
+### 10b. Reemplazar todos los puntos (PUT completo) con assistant -> 200
+PUT {{api}}/assistant/oficina
+Authorization: Bearer {{assistant_token}}
+Content-Type: application/json
+
+{
+  "author": "assistant",
+  "name": "oficina",
+  "points": [ { "x": 0, "y": 0 }, { "x": 8, "y": 0 }, { "x": 8, "y": 8 }, { "x": 0, "y": 8 } ]
+}
+
+### 10c. PUT completo con student -> 403
+PUT {{api}}/john/house
+Authorization: Bearer {{student_token}}
+Content-Type: application/json
+
+{ "points": [ { "x": 1, "y": 1 } ] }
+
+### 10d. Eliminar con student -> 403
+DELETE {{api}}/assistant/oficina
+Authorization: Bearer {{student_token}}
+
+### 10e. Eliminar con assistant -> 200 (repetirla da 404)
+DELETE {{api}}/assistant/oficina
+Authorization: Bearer {{assistant_token}}
+
 ### 11. Datos invalidos -> 400
 POST {{api}}
 Authorization: Bearer {{assistant_token}}

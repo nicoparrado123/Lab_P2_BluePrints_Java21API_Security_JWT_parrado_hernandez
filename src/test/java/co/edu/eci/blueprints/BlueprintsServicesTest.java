@@ -80,6 +80,33 @@ class BlueprintsServicesTest {
     }
 
     @Test
+    void updateBlueprintReplacesAllPoints() throws Exception {
+        List<Point> pts = List.of(new Point(1, 1), new Point(2, 3));
+        Blueprint updated = services.updateBlueprint("john", "house", pts);
+        assertEquals(pts, updated.getPoints());
+        assertEquals(pts, persistence.getBlueprint("john", "house").getPoints());
+    }
+
+    @Test
+    void updateUnknownBlueprintThrows() {
+        assertThrows(BlueprintNotFoundException.class,
+                () -> services.updateBlueprint("nobody", "x", List.of(new Point(1, 1))));
+    }
+
+    @Test
+    void deleteBlueprintRemovesIt() throws Exception {
+        services.deleteBlueprint("john", "garage");
+        assertThrows(BlueprintNotFoundException.class, () -> services.getBlueprint("john", "garage"));
+        assertEquals(1, services.getBlueprintsByAuthor("john").size());
+        assertEquals(2, services.getAllBlueprints().size());
+    }
+
+    @Test
+    void deleteUnknownBlueprintThrows() {
+        assertThrows(BlueprintNotFoundException.class, () -> services.deleteBlueprint("john", "nothing"));
+    }
+
+    @Test
     void redundancyFilterRemovesConsecutiveDuplicates() {
         Blueprint bp = new Blueprint("x", "y", List.of(
                 new Point(1, 1), new Point(1, 1), new Point(2, 2), new Point(1, 1)));

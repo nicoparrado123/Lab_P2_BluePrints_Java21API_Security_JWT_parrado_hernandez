@@ -59,4 +59,19 @@ public class InMemoryBlueprintPersistence implements BlueprintPersistence {
     public void addPoint(String author, String name, int x, int y) throws BlueprintNotFoundException {
         getBlueprint(author, name).addPoint(new Point(x, y));
     }
+
+    @Override
+    public Blueprint updateBlueprint(String author, String name, List<Point> points) throws BlueprintNotFoundException {
+        // computeIfPresent es atomico: reemplaza el plano completo sin carreras con otro PUT/DELETE
+        Blueprint updated = blueprints.computeIfPresent(keyOf(author, name),
+                (k, old) -> new Blueprint(author, name, points));
+        if (updated == null) throw new BlueprintNotFoundException("Blueprint not found: %s/%s".formatted(author, name));
+        return updated;
+    }
+
+    @Override
+    public void deleteBlueprint(String author, String name) throws BlueprintNotFoundException {
+        if (blueprints.remove(keyOf(author, name)) == null)
+            throw new BlueprintNotFoundException("Blueprint not found: %s/%s".formatted(author, name));
+    }
 }
